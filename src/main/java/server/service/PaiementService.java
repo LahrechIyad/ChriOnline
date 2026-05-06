@@ -2,7 +2,9 @@ package server.service;
 
 import server.dao.CommandeDAO;
 import server.dao.PaiementDAO;
+import server.dao.UserDAO;
 import shared.model.Paiement;
+import shared.model.User;
 import shared.network.Response;
 
 /**
@@ -12,11 +14,15 @@ public class PaiementService {
     private PaiementDAO paiementDAO;
     private CommandeDAO commandeDAO;
     private PanierService panierService;
+    private UserDAO userDAO;
+    private EmailService emailService;
 
     public PaiementService(PanierService panierService) {
         this.paiementDAO = new PaiementDAO();
         this.commandeDAO = new CommandeDAO();
         this.panierService = panierService;
+        this.userDAO = new UserDAO();
+        this.emailService = new EmailService();
     }
 
     /**
@@ -41,10 +47,16 @@ public class PaiementService {
             // Update order status
             commandeDAO.updateStatus(orderId, "VALIDATED");
 
-            // Clear the user's cart (safety net — also done in createOrder)
+            // Clear the user's cart (safety net - also done in createOrder)
             int userId = commandeDAO.findUserIdByOrderId(orderId);
             if (userId != -1) {
                 panierService.clearCart(userId);
+                
+                // Send confirmation email
+                User user = userDAO.findById(userId);
+                if (user != null && user.getEmail() != null) {
+                    new Thread(() -> emailService.sendOrderSummary(user.getEmail(), orderId, amount, method)).start();
+                }
             }
 
             return new Response(true, "Payment successful. Order VALIDATED.", paiement);

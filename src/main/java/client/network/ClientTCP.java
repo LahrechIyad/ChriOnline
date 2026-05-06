@@ -17,6 +17,7 @@ public class ClientTCP {
     private Socket socket;
     private ObjectOutputStream out;
     private ObjectInputStream in;
+    private String sessionToken;
 
     public ClientTCP(String serverAddress, int port) {
         this.serverAddress = serverAddress;
@@ -38,6 +39,14 @@ public class ClientTCP {
         }
     }
 
+    public void setSessionToken(String token) {
+        this.sessionToken = token;
+    }
+
+    public String getSessionToken() {
+        return this.sessionToken;
+    }
+
     /**
      * Sends a request to the server and waits for the response.
      * @param request Request to send
@@ -45,6 +54,15 @@ public class ClientTCP {
      */
     public Response sendRequest(Request request) {
         try {
+            // TP2 Client side: ensure timestamps and nonces are populated
+            request.setTimestamp(System.currentTimeMillis());
+            request.setNonce(java.util.UUID.randomUUID().toString());
+            
+            // TP5 Client side: inject session token if we have one
+            if (this.sessionToken != null) {
+                request.setSessionToken(this.sessionToken);
+            }
+            
             out.writeObject(request);
             out.flush();
             return (Response) in.readObject();

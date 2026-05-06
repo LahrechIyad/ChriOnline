@@ -20,13 +20,15 @@ public class UserDAO {
      * @param user User object containing registration details
      * @return True if insertion is successful, false otherwise
      */
-    public boolean save(User user) {
-        String query = "INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)";
+    public boolean save(User user, String verificationCode) {
+        String query = "INSERT INTO users (username, email, password, role, is_verified, verification_code) VALUES (?, ?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = connection.prepareStatement(query)) {
             stmt.setString(1, user.getUsername());
             stmt.setString(2, user.getEmail());
             stmt.setString(3, user.getPassword());
             stmt.setString(4, user.getRole() != null ? user.getRole() : "CUSTOMER");
+            stmt.setBoolean(5, false); // always false on register
+            stmt.setString(6, verificationCode);
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
             System.err.println("Error saving user: " + e.getMessage());
@@ -50,7 +52,8 @@ public class UserDAO {
                     rs.getString("username"),
                     rs.getString("email"),
                     rs.getString("password"),
-                    rs.getString("role")
+                    rs.getString("role"),
+                    rs.getBoolean("is_verified")
                 );
             }
         } catch (SQLException e) {
@@ -77,12 +80,84 @@ public class UserDAO {
                     rs.getString("username"),
                     rs.getString("email"),
                     rs.getString("password"),
-                    rs.getString("role")
+                    rs.getString("role"),
+                    rs.getBoolean("is_verified")
                 );
             }
         } catch (SQLException e) {
             System.err.println("Error authenticating user: " + e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * Finds a user by ID.
+     */
+    public User findById(int id) {
+        String query = "SELECT * FROM users WHERE id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setInt(1, id);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return new User(
+                    rs.getInt("id"),
+                    rs.getString("username"),
+                    rs.getString("email"),
+                    rs.getString("password"),
+                    rs.getString("role"),
+                    rs.getBoolean("is_verified")
+                );
+            }
+        } catch (SQLException e) {
+            System.err.println("Error finding user by ID: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Verifies the user if the code matches.
+     */
+    public boolean verifyUser(String email, String code) {
+        String query = "UPDATE users SET is_verified = 1 WHERE email = ? AND verification_code = ? AND is_verified = 0";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, email);
+            stmt.setString(2, code);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error verifying user: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Gets the public key of an admin user.
+     */
+    public String getPublicKey(String email) {
+        String query = "SELECT public_key FROM users WHERE email = ? AND role = 'ADMIN'";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, email);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return rs.getString("public_key");
+            }
+        } catch (SQLException e) {
+            System.err.println("Error finding public key by email: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Updates the public key for an admin user.
+     */
+    public boolean saveAdminPublicKey(String email, String publicKeyBase64) {
+        String query = "UPDATE users SET public_key = ? WHERE email = ? AND role = 'ADMIN'";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, publicKeyBase64);
+            stmt.setString(2, email);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error saving public key: " + e.getMessage());
+            return false;
+        }
     }
 }

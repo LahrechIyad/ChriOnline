@@ -75,6 +75,22 @@ public class DBConnection {
             }
             System.out.println("Database schema initialized successfully.");
 
+            // Migration: Add is_verified and verification_code silently (ignores error if already exist)
+            try {
+                stmt.execute("ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT 0");
+                System.out.println("Migrated users table: added is_verified");
+            } catch (SQLException e) { /* Column might exist */ }
+            
+            try {
+                stmt.execute("ALTER TABLE users ADD COLUMN verification_code VARCHAR(10)");
+                System.out.println("Migrated users table: added verification_code");
+            } catch (SQLException e) { /* Column might exist */ }
+
+            try {
+                stmt.execute("ALTER TABLE users ADD COLUMN public_key TEXT");
+                System.out.println("Migrated users table: added public_key");
+            } catch (SQLException e) { /* Column might exist */ }
+
         } catch (Exception e) {
             System.err.println("Error initializing database schema: " + e.getMessage());
         }
