@@ -76,6 +76,33 @@ public class UserService {
         }
     }
 
+    public Response resendVerificationCode(String email) {
+        if (email == null || email.isBlank()) {
+            return new Response(false, "Email is required.", null);
+        }
+
+        if (!EMAIL_PATTERN.matcher(email).matches()) {
+            return new Response(false, "Invalid email format.", null);
+        }
+
+        User user = userDAO.findByEmail(email);
+        if (user == null) {
+            return new Response(false, "No account found for this email.", null);
+        }
+
+        if (user.isVerified()) {
+            return new Response(false, "This account is already verified.", null);
+        }
+
+        String verificationCode = String.format("%06d", new Random().nextInt(999999));
+        if (!userDAO.updateVerificationCode(email, verificationCode)) {
+            return new Response(false, "Failed to refresh verification code.", null);
+        }
+
+        new Thread(() -> emailService.sendRegistrationVerification(email, verificationCode)).start();
+        return new Response(true, "A new verification code has been sent.", null);
+    }
+
     /**
      * Authenticates a user with Brute Force protection.
      */

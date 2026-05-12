@@ -13,6 +13,8 @@ public class Paiement implements Serializable {
     private double amount;
     private String method; // e.g., CREDIT_CARD, PAYPAL
     private String status; // SUCCESS, FAILED
+    private String maskedCard;
+    private String encryptedBillingOrDeliveryAddress;
 
     public Paiement() {}
 
@@ -45,6 +47,14 @@ public class Paiement implements Serializable {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getMaskedCard() { return maskedCard; }
+    public void setMaskedCard(String maskedCard) { this.maskedCard = maskedCard; }
+
+    public String getEncryptedBillingOrDeliveryAddress() { return encryptedBillingOrDeliveryAddress; }
+    public void setEncryptedBillingOrDeliveryAddress(String encryptedBillingOrDeliveryAddress) {
+        this.encryptedBillingOrDeliveryAddress = encryptedBillingOrDeliveryAddress;
+    }
 
     @Override
     public String toString() {

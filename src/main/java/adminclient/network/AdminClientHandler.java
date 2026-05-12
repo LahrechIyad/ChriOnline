@@ -2,12 +2,18 @@ package adminclient.network;
 
 import shared.network.Request;
 import shared.network.Response;
+import shared.security.AESUtil;
+import shared.security.RSAUtil;
+import shared.security.SecureMessage;
+import shared.security.SecureSession;
 import shared.security.Signer;
 
+import javax.crypto.SecretKey;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,6 +24,7 @@ public class AdminClientHandler {
     private ObjectOutputStream out;
     private ObjectInputStream in;
     private String sessionToken;
+    private final SecureSession secureSession = new SecureSession();
 
     public AdminClientHandler(String serverAddress, int port) {
         this.serverAddress = serverAddress;
@@ -28,6 +35,7 @@ public class AdminClientHandler {
         socket = new Socket(serverAddress, port);
         out = new ObjectOutputStream(socket.getOutputStream());
         in = new ObjectInputStream(socket.getInputStream());
+        performHandshake();
     }
 
     public void disconnect() {
@@ -44,9 +52,12 @@ public class AdminClientHandler {
         if (sessionToken != null) {
             request.setSessionToken(sessionToken);
         }
-        out.writeObject(request);
+        request.setTimestamp(System.currentTimeMillis());
+        request.setNonce(java.util.UUID.randomUUID().toString());
+        out.writeObject(AESUtil.encryptObject(request, secureSession.getAesKey()));
         out.flush();
-        return (Response) in.readObject();
+        SecureMessage responseMessage = (SecureMessage) in.readObject();
+        return (Response) AESUtil.decryptObject(responseMessage, secureSession.getAesKey());
     }
 
     public boolean authenticateAdmin(String email, PrivateKey privateKey) {
@@ -100,5 +111,27 @@ public class AdminClientHandler {
         }
         System.out.println("[AdminClient] Fetching sensitive dashboard data using session token: " + sessionToken);
         // Implement real requests here...
+    }
+
+    public Response sendAdminRequest(String type, Object data) throws Exception {
+        return sendRequest(new Request(type, data));
+    }
+
+    public String getSessionToken() {
+        return sessionToken;
+    }
+
+    private void performHandshake() throws Exception {
+        byte[] serverPublicKeyBytes = (byte[]) in.readObject();
+        System.out.println("Client: Server public key received");
+        PublicKey serverPublicKey = RSAUtil.decodePublicKey(serverPublicKeyBytes);
+        SecretKey aesKey = AESUtil.generateKey();
+        secureSession.setAesKey(aesKey);
+        System.out.println("Client: AES session key generated");
+        byte[] encryptedAesKey = RSAUtil.encryptAesKey(aesKey, serverPublicKey);
+        out.writeObject(encryptedAesKey);
+        out.flush();
+        System.out.println("Client: AES key encrypted with RSA and sent");
+        System.out.println("Client: Secure AES communication established");
     }
 }

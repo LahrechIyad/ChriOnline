@@ -21,12 +21,14 @@ public class PaiementDAO {
      * @return true if successful
      */
     public boolean save(Paiement paiement) {
-        String query = "INSERT INTO payments (order_id, amount, method, status) VALUES (?, ?, ?, ?)";
+        String query = "INSERT INTO payments (order_id, amount, method, status, masked_card, encrypted_billing_or_delivery_address) VALUES (?, ?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = connection.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setInt(1, paiement.getOrderId());
             stmt.setDouble(2, paiement.getAmount());
             stmt.setString(3, paiement.getMethod());
             stmt.setString(4, paiement.getStatus());
+            stmt.setString(5, paiement.getMaskedCard());
+            stmt.setString(6, paiement.getEncryptedBillingOrDeliveryAddress());
             
             int affectedRows = stmt.executeUpdate();
             if (affectedRows > 0) {

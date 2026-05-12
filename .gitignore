@@ -34,6 +34,7 @@ target/
 
 # Database
 chri_online.db
+*.db
 
 # Security and Keystores
 *.p12

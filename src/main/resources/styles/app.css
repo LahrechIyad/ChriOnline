@@ -1,0 +1,153 @@
+.root {
+    -fx-font-family: "Segoe UI";
+    -fx-background-color: linear-gradient(to bottom right, #eaf8ff, #ddf5ff);
+    -fx-text-fill: #111827;
+}
+
+.auth-root, .app-shell {
+    -fx-background-color: linear-gradient(to bottom right, #eaf8ff, #ddf5ff);
+}
+
+.hero-pane {
+    -fx-background-color: linear-gradient(to bottom right, rgba(125, 211, 252, 0.70), rgba(255,255,255,0.70));
+    -fx-background-radius: 32;
+    -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.12), 40, 0.15, 0, 16);
+}
+
+.glass-card, .product-card, .featured-card, .topbar {
+    -fx-background-color: rgba(255,255,255,0.82);
+    -fx-background-radius: 24;
+    -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.10), 30, 0.12, 0, 12);
+}
+
+.featured-card {
+    -fx-background-color: linear-gradient(to right, rgba(255,255,255,0.92), rgba(199,255,74,0.30));
+}
+
+.hero-brand, .sidebar-brand {
+    -fx-font-size: 18px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #0f172a;
+}
+
+.hero-title {
+    -fx-font-size: 38px;
+    -fx-font-weight: 900;
+    -fx-text-fill: #111827;
+}
+
+.featured-title, .section-title {
+    -fx-font-size: 26px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #111827;
+}
+
+.product-title, .topbar-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #111827;
+}
+
+.hero-subtitle, .sidebar-subtitle, .muted-label {
+    -fx-text-fill: #475569;
+}
+
+.hero-caption {
+    -fx-text-fill: #334155;
+    -fx-font-size: 14px;
+}
+
+.primary-button, .secondary-button, .ghost-button, .nav-button, .chip-button {
+    -fx-background-radius: 18;
+    -fx-padding: 10 16 10 16;
+    -fx-font-weight: 700;
+    -fx-cursor: hand;
+}
+
+.primary-button {
+    -fx-background-color: #c7ff4a;
+    -fx-text-fill: #0f172a;
+}
+
+.secondary-button {
+    -fx-background-color: rgba(15, 23, 42, 0.08);
+    -fx-text-fill: #0f172a;
+}
+
+.ghost-button {
+    -fx-background-color: transparent;
+    -fx-border-color: rgba(15,23,42,0.12);
+    -fx-border-radius: 18;
+    -fx-text-fill: #0f172a;
+}
+
+.sidebar {
+    -fx-background-color: #0f172a;
+    -fx-background-radius: 28;
+}
+
+.sidebar-brand, .sidebar-subtitle {
+    -fx-text-fill: white;
+}
+
+.nav-button {
+    -fx-background-color: rgba(255,255,255,0.10);
+    -fx-text-fill: white;
+}
+
+.chip-button {
+    -fx-background-color: rgba(125, 211, 252, 0.25);
+    -fx-text-fill: #0f172a;
+}
+
+.price-label {
+    -fx-font-size: 20px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #0f172a;
+}
+
+.old-price {
+    -fx-text-fill: #94a3b8;
+    -fx-strikethrough: true;
+}
+
+.security-badge, .success-badge, .warning-badge, .danger-badge {
+    -fx-background-radius: 999;
+    -fx-padding: 6 12 6 12;
+    -fx-font-weight: 700;
+}
+
+.security-badge, .success-badge {
+    -fx-background-color: rgba(199,255,74,0.45);
+    -fx-text-fill: #14532d;
+}
+
+.warning-badge {
+    -fx-background-color: rgba(251,191,36,0.25);
+    -fx-text-fill: #92400e;
+}
+
+.danger-badge {
+    -fx-background-color: rgba(248,113,113,0.20);
+    -fx-text-fill: #991b1b;
+}
+
+.success-label {
+    -fx-text-fill: #166534;
+    -fx-font-weight: 700;
+}
+
+.error-label {
+    -fx-text-fill: #b91c1c;
+    -fx-font-weight: 700;
+}
+
+.image-shell {
+    -fx-background-color: linear-gradient(to bottom right, rgba(125,211,252,0.18), rgba(255,255,255,0.80));
+    -fx-background-radius: 20;
+    -fx-alignment: center;
+}
+
+.scroll-pane, .scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}

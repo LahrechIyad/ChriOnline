@@ -3,16 +3,24 @@ package server.network;
 import shared.network.Request;
 import shared.network.Response;
 import shared.model.User;
+import shared.model.Produit;
 import server.service.*;
+import server.security.ServerKeyManager;
+import shared.security.AESUtil;
+import shared.security.RSAUtil;
+import shared.security.SecureMessage;
+import shared.security.SecureSession;
 
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import javax.crypto.SecretKey;
 
 /**
  * Handles communication with a single connected client.
@@ -21,6 +29,7 @@ public class ClientHandler implements Runnable {
     private Socket clientSocket;
     private ObjectInputStream in;
     private ObjectOutputStream out;
+    private final SecureSession secureSession = new SecureSession();
     
     // Services
     private UserService userService;
@@ -29,6 +38,7 @@ public class ClientHandler implements Runnable {
     private CommandeService commandeService;
     private PaiementService paiementService;
     private AdminAuthService adminAuthService;
+    private ServerKeyManager serverKeyManager;
 
     // TP5 - Session State
     // We bind tokens to Users globally, so if TCP connection drops, token is still valid.
@@ -39,7 +49,8 @@ public class ClientHandler implements Runnable {
     private static final long MAX_TIMESTAMP_AGE_MS = 5 * 60 * 1000; // 5 minutes
 
     public ClientHandler(Socket clientSocket, UserService userService, ProduitService produitService,
-                         PanierService panierService, CommandeService commandeService, PaiementService paiementService, AdminAuthService adminAuthService) {
+                         PanierService panierService, CommandeService commandeService, PaiementService paiementService,
+                         AdminAuthService adminAuthService, ServerKeyManager serverKeyManager) {
         this.clientSocket = clientSocket;
         this.userService = userService;
         this.produitService = produitService;
@@ -47,6 +58,7 @@ public class ClientHandler implements Runnable {
         this.commandeService = commandeService;
         this.paiementService = paiementService;
         this.adminAuthService = adminAuthService;
+        this.serverKeyManager = serverKeyManager;
     }
 
     @Override
@@ -54,10 +66,12 @@ public class ClientHandler implements Runnable {
         try {
             out = new ObjectOutputStream(clientSocket.getOutputStream());
             in = new ObjectInputStream(clientSocket.getInputStream());
+            performHandshake();
 
             while (true) {
-                Request request = (Request) in.readObject();
-                if (request == null) break;
+                SecureMessage secureMessage = (SecureMessage) in.readObject();
+                if (secureMessage == null) break;
+                Request request = (Request) AESUtil.decryptObject(secureMessage, secureSession.getAesKey());
 
                 // TP2 - Replay Attack Check
                 if (!isValidRequest(request)) {
@@ -68,7 +82,7 @@ public class ClientHandler implements Runnable {
                 Response response = processRequest(request);
                 sendResponse(response);
             }
-        } catch (IOException | ClassNotFoundException e) {
+        } catch (Exception e) {
             System.out.println("Client disconnected or error: " + e.getMessage());
         } finally {
             closeConnections();
@@ -76,9 +90,13 @@ public class ClientHandler implements Runnable {
     }
     
     private void sendResponse(Response response) throws IOException {
-        out.reset(); // Prevent ObjectOutputStream from caching stale objects
-        out.writeObject(response);
-        out.flush();
+        try {
+            out.reset();
+            out.writeObject(AESUtil.encryptObject(response, secureSession.getAesKey()));
+            out.flush();
+        } catch (Exception e) {
+            throw new IOException("Failed to encrypt response", e);
+        }
     }
 
     private boolean isValidRequest(Request request) {
@@ -119,6 +137,12 @@ public class ClientHandler implements Runnable {
                     return userService.verifyAccount(verifData.get("email"), verifData.get("code"));
                 }
                 return new Response(false, "Invalid verification data format.", null);
+
+            case "RESEND_VERIFICATION_CODE":
+                if (data instanceof String) {
+                    return userService.resendVerificationCode((String) data);
+                }
+                return new Response(false, "Invalid email format for resend request.", null);
 
             case "LOGIN":
                 if (data instanceof Map) {
@@ -182,6 +206,12 @@ public class ClientHandler implements Runnable {
             case "GET_PRODUCT":
                 return produitService.getProductDetails((Integer) data);
 
+            case "SEARCH_PRODUCTS":
+                return produitService.searchProducts((String) data);
+
+            case "FILTER_PRODUCTS_BY_CATEGORY":
+                return produitService.filterProductsByCategory((String) data);
+
             // Protected Routes below
             case "ADD_TO_CART":
                 if (loggedInUser == null) return new Response(false, "Unauthenticated session.", null);
@@ -208,10 +238,17 @@ public class ClientHandler implements Runnable {
                 if (loggedInUser == null) return new Response(false, "Unauthenticated session.", null);
                 if (data instanceof Map) {
                     Map<String, Object> paymentData = (Map<String, Object>) data;
+                    String maskedCard = (String) paymentData.get("maskedCard");
+                    if ((maskedCard == null || maskedCard.isBlank()) && paymentData.get("cardNumber") instanceof String) {
+                        maskedCard = maskCardNumber((String) paymentData.get("cardNumber"));
+                    }
+                    String deliveryAddress = (String) paymentData.get("deliveryAddress");
                     return paiementService.processPayment(
                         (Integer) paymentData.get("orderId"),
                         (Double) paymentData.get("amount"),
-                        (String) paymentData.get("method")
+                        (String) paymentData.get("method"),
+                        maskedCard,
+                        deliveryAddress
                     );
                 }
                 return new Response(false, "Invalid payment data.", null);
@@ -220,9 +257,77 @@ public class ClientHandler implements Runnable {
                 if (loggedInUser == null) return new Response(false, "Unauthenticated session.", null);
                 return commandeService.getOrdersByUser(loggedInUser.getId());
 
+            case "ADMIN_GET_DASHBOARD_STATS":
+                if (!isAdmin(loggedInUser)) return new Response(false, "Admin role required.", null);
+                return commandeService.getDashboardStats();
+
+            case "ADMIN_GET_PRODUCTS":
+                if (!isAdmin(loggedInUser)) return new Response(false, "Admin role required.", null);
+                return produitService.getAllProducts();
+
+            case "ADMIN_CREATE_PRODUCT":
+                if (!isAdmin(loggedInUser)) return new Response(false, "Admin role required.", null);
+                return produitService.createProduct((Produit) data);
+
+            case "ADMIN_UPDATE_PRODUCT":
+                if (!isAdmin(loggedInUser)) return new Response(false, "Admin role required.", null);
+                return produitService.updateProduct((Produit) data);
+
+            case "ADMIN_DELETE_PRODUCT":
+                if (!isAdmin(loggedInUser)) return new Response(false, "Admin role required.", null);
+                return produitService.deleteProduct((Integer) data);
+
+            case "ADMIN_GET_ORDERS":
+                if (!isAdmin(loggedInUser)) return new Response(false, "Admin role required.", null);
+                return commandeService.getAllOrders((String) data);
+
+            case "ADMIN_GET_ORDER_DETAILS":
+                if (!isAdmin(loggedInUser)) return new Response(false, "Admin role required.", null);
+                return commandeService.getOrderDetails((Integer) data);
+
+            case "ADMIN_UPDATE_ORDER_STATUS":
+                if (!isAdmin(loggedInUser)) return new Response(false, "Admin role required.", null);
+                if (data instanceof Map) {
+                    Map<String, Object> statusData = (Map<String, Object>) data;
+                    return commandeService.updateOrderStatus((Integer) statusData.get("orderId"), (String) statusData.get("status"));
+                }
+                return new Response(false, "Invalid order status data.", null);
+
+            case "ADMIN_GET_LOW_STOCK":
+                if (!isAdmin(loggedInUser)) return new Response(false, "Admin role required.", null);
+                Integer threshold = data instanceof Integer ? (Integer) data : 5;
+                return produitService.getLowStockProducts(threshold);
+
             default:
                 return new Response(false, "Unknown request type.", null);
         }
+    }
+
+    private void performHandshake() throws Exception {
+        System.out.println("Server: Secure handshake started");
+        out.writeObject(serverKeyManager.getPublicKey().getEncoded());
+        out.flush();
+        System.out.println("Server: Server public key sent");
+        byte[] encryptedAesKey = (byte[]) in.readObject();
+        SecretKey aesKey = RSAUtil.decryptAesKey(encryptedAesKey, serverKeyManager.getPrivateKey());
+        secureSession.setAesKey(aesKey);
+        System.out.println("Server: AES session key received and decrypted");
+        System.out.println("Server: Secure AES communication established");
+    }
+
+    private boolean isAdmin(User user) {
+        return user != null && "ADMIN".equalsIgnoreCase(user.getRole());
+    }
+
+    private String maskCardNumber(String cardNumber) {
+        if (cardNumber == null || cardNumber.isBlank()) {
+            return null;
+        }
+        String digits = cardNumber.replaceAll("\\s+", "");
+        if (digits.length() < 4) {
+            return "****";
+        }
+        return "**** **** **** " + digits.substring(digits.length() - 4);
     }
 
     private void closeConnections() {

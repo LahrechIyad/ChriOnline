@@ -3,9 +3,12 @@ package server.service;
 import server.dao.CommandeDAO;
 import server.dao.PaiementDAO;
 import server.dao.UserDAO;
+import server.security.DatabaseCryptoService;
 import shared.model.Paiement;
 import shared.model.User;
 import shared.network.Response;
+
+import java.util.Map;
 
 /**
  * Service handling logic for Payments.
@@ -16,6 +19,7 @@ public class PaiementService {
     private PanierService panierService;
     private UserDAO userDAO;
     private EmailService emailService;
+    private DatabaseCryptoService databaseCryptoService;
 
     public PaiementService(PanierService panierService) {
         this.paiementDAO = new PaiementDAO();
@@ -23,12 +27,17 @@ public class PaiementService {
         this.panierService = panierService;
         this.userDAO = new UserDAO();
         this.emailService = new EmailService();
+        this.databaseCryptoService = new DatabaseCryptoService();
     }
 
     /**
      * Simulates payment processing and confirms payment.
      */
     public Response processPayment(int orderId, double amount, String method) {
+        return processPayment(orderId, amount, method, null, null);
+    }
+
+    public Response processPayment(int orderId, double amount, String method, String maskedCard, String deliveryAddress) {
         // In a real application, we would call an external payment API here (Stripe, PayPal, etc.)
         System.out.println("Processing payment of " + amount + " via " + method + " for order " + orderId + "...");
         
@@ -41,6 +50,8 @@ public class PaiementService {
 
         // Simulate successful payment
         Paiement paiement = new Paiement(orderId, amount, method, "SUCCESS");
+        paiement.setMaskedCard(maskedCard);
+        paiement.setEncryptedBillingOrDeliveryAddress(databaseCryptoService.encryptToBase64(deliveryAddress));
         boolean isSaved = paiementDAO.save(paiement);
 
         if (isSaved) {

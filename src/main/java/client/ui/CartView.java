@@ -1,136 +1,125 @@
 package client.ui;
 
 import client.network.ClientTCP;
-import shared.model.Panier;
+import javafx.geometry.Insets;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import shared.model.LignePanier;
+import shared.model.Panier;
 import shared.model.User;
 import shared.network.Request;
 import shared.network.Response;
 
-import javafx.beans.property.SimpleDoubleProperty;
-import javafx.beans.property.SimpleStringProperty;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
-import javafx.geometry.Insets;
-import javafx.scene.control.*;
-import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.VBox;
-
 public class CartView {
-    private VBox view;
-    private ClientTCP clientTCP;
-    private User currentUser;
-    private TableView<LignePanier> table;
-    private Label totalLabel;
-    private Label messageLabel;
+    private final BorderPane view = new BorderPane();
+    private final ClientTCP clientTCP;
+    private final VBox itemsBox = new VBox(14);
+    private final Label totalLabel = new Label("$0.00");
+    private final Label discountLabel = new Label();
+    private final Label feedback = new Label();
 
     public CartView(ClientTCP clientTCP, User user) {
         this.clientTCP = clientTCP;
-        this.currentUser = user;
         buildView();
         loadData();
     }
 
     private void buildView() {
-        view = new VBox(15);
-        view.setPadding(new Insets(20));
+        view.setPadding(new Insets(18));
+        HBox content = new HBox(20);
 
-        Label title = new Label("Shopping Cart");
-        title.setStyle("-fx-font-size: 22px; -fx-font-weight: bold;");
+        ScrollPane scrollPane = new ScrollPane(itemsBox);
+        scrollPane.setFitToWidth(true);
+        HBox.setHgrow(scrollPane, Priority.ALWAYS);
 
-        table = new TableView<>();
+        VBox summary = new VBox(14);
+        summary.getStyleClass().add("glass-card");
+        summary.setPadding(new Insets(22));
+        summary.setPrefWidth(300);
+        Label title = new Label("Order summary");
+        title.getStyleClass().add("section-title");
+        totalLabel.getStyleClass().add("price-label");
+        discountLabel.getStyleClass().add("muted-label");
+        feedback.getStyleClass().add("muted-label");
+        Button checkout = new Button("Validate order");
+        checkout.getStyleClass().add("primary-button");
+        checkout.setMaxWidth(Double.MAX_VALUE);
+        checkout.setOnAction(e -> validateOrder());
+        summary.getChildren().addAll(title, totalLabel, discountLabel, checkout, feedback);
 
-        TableColumn<LignePanier, String> nameCol = new TableColumn<>("Product");
-        nameCol.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getProduct().getName()));
-        nameCol.setPrefWidth(200);
-
-        TableColumn<LignePanier, Double> priceCol = new TableColumn<>("Unit Price ($)");
-        priceCol.setCellValueFactory(
-                cellData -> new SimpleDoubleProperty(cellData.getValue().getProduct().getPrice()).asObject());
-        priceCol.setPrefWidth(120);
-
-        TableColumn<LignePanier, Integer> qtyCol = new TableColumn<>("Quantity");
-        qtyCol.setCellValueFactory(new PropertyValueFactory<>("quantity"));
-        qtyCol.setPrefWidth(100);
-
-        TableColumn<LignePanier, Double> subCol = new TableColumn<>("Subtotal ($)");
-        subCol.setCellValueFactory(cellData -> new SimpleDoubleProperty(cellData.getValue().getSubTotal()).asObject());
-        subCol.setPrefWidth(120);
-
-        TableColumn<LignePanier, Void> actionCol = new TableColumn<>("Action");
-        actionCol.setPrefWidth(100);
-        actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button btn = new Button("Remove");
-            {
-                btn.setStyle("-fx-background-color: #dc3545; -fx-text-fill: white;");
-                btn.setOnAction(e -> {
-                    LignePanier item = getTableView().getItems().get(getIndex());
-                    Response resp = clientTCP.sendRequest(new Request("REMOVE_FROM_CART", item.getProduct().getId()));
-                    if (resp != null && resp.isSuccess()) {
-                        showMessage("Removed " + item.getProduct().getName() + " from cart.", true);
-                        loadData();
-                    } else {
-                        showMessage(resp != null ? resp.getMessage() : "Failed to remove item.", false);
-                    }
-                });
-            }
-
-            @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty) {
-                    setGraphic(null);
-                } else {
-                    setGraphic(btn);
-                }
-            }
-        });
-
-        table.getColumns().addAll(nameCol, priceCol, qtyCol, subCol, actionCol);
-
-        totalLabel = new Label("Total: $0.00");
-        totalLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
-
-        Button checkoutBtn = new Button("Validate Order");
-        checkoutBtn.setStyle("-fx-background-color: #ffc107; -fx-text-fill: black; -fx-font-weight: bold;");
-
-        messageLabel = new Label();
-
-        checkoutBtn.setOnAction(e -> {
-            Response resp = clientTCP.sendRequest(new Request("CREATE_ORDER", null));
-            if (resp != null && resp.isSuccess()) {
-                showMessage("Order validated successfully. Go to My Orders to pay.", true);
-                loadData();
-            } else {
-                showMessage(resp != null ? resp.getMessage() : "Validation failed.", false);
-            }
-        });
-
-        HBox bottomBox = new HBox(20);
-        bottomBox.getChildren().addAll(totalLabel, checkoutBtn);
-
-        view.getChildren().addAll(title, table, bottomBox, messageLabel);
+        content.getChildren().addAll(scrollPane, summary);
+        view.setCenter(content);
     }
 
     private void loadData() {
         Response resp = clientTCP.sendRequest(new Request("VIEW_CART", null));
         if (resp != null && resp.isSuccess()) {
-            Panier cart = (Panier) resp.getData();
-            ObservableList<LignePanier> data = FXCollections.observableArrayList(cart.getItems());
-            table.setItems(data);
-            totalLabel.setText(String.format("Total: $%.2f", cart.getTotal()));
+            renderCart((Panier) resp.getData());
         } else {
-            showMessage("Failed to load cart.", false);
+            feedback.setText(resp != null ? resp.getMessage() : "Failed to load cart.");
+            feedback.getStyleClass().setAll("error-label");
         }
     }
 
-    private void showMessage(String msg, boolean success) {
-        messageLabel.setText(msg);
-        messageLabel.setStyle(success ? "-fx-text-fill: green;" : "-fx-text-fill: red;");
+    private void renderCart(Panier cart) {
+        itemsBox.getChildren().clear();
+        if (cart.getItems().isEmpty()) {
+            Label empty = new Label("Your cart is empty.");
+            empty.getStyleClass().add("muted-label");
+            itemsBox.getChildren().add(empty);
+        }
+        for (LignePanier item : cart.getItems()) {
+            itemsBox.getChildren().add(itemCard(item));
+        }
+        double subtotal = cart.getTotal();
+        double estimatedDiscount = cart.getItems().stream()
+                .mapToDouble(line -> (line.getProduct().getPrixUsd() - line.getProduct().getFinalPrice()) * line.getQuantity())
+                .sum();
+        totalLabel.setText(String.format("Total: $%.2f", subtotal));
+        discountLabel.setText(String.format("$%.2f estimated discount", estimatedDiscount));
     }
 
-    public VBox getView() {
+    private VBox itemCard(LignePanier item) {
+        VBox card = new VBox(8);
+        card.getStyleClass().add("product-card");
+        card.setPadding(new Insets(16));
+        Label name = new Label(item.getProduct().getDisplayName());
+        name.getStyleClass().add("product-title");
+        Label meta = new Label(item.getQuantity() + " x $" + String.format("%.2f", item.getProduct().getFinalPrice()));
+        meta.getStyleClass().add("muted-label");
+        Label subtotal = new Label(String.format("Subtotal: $%.2f", item.getSubTotal()));
+        subtotal.getStyleClass().add("price-label");
+        Button remove = new Button("Remove");
+        remove.getStyleClass().add("secondary-button");
+        remove.setOnAction(e -> removeItem(item.getProduct().getId()));
+        card.getChildren().addAll(name, meta, subtotal, remove);
+        return card;
+    }
+
+    private void removeItem(int productId) {
+        Response resp = clientTCP.sendRequest(new Request("REMOVE_FROM_CART", productId));
+        feedback.setText(resp != null ? resp.getMessage() : "Failed to remove item.");
+        feedback.getStyleClass().setAll(resp != null && resp.isSuccess() ? "success-label" : "error-label");
+        if (resp != null && resp.isSuccess()) {
+            loadData();
+        }
+    }
+
+    private void validateOrder() {
+        Response resp = clientTCP.sendRequest(new Request("CREATE_ORDER", null));
+        feedback.setText(resp != null ? resp.getMessage() : "Order validation failed.");
+        feedback.getStyleClass().setAll(resp != null && resp.isSuccess() ? "success-label" : "error-label");
+        if (resp != null && resp.isSuccess()) {
+            loadData();
+        }
+    }
+
+    public BorderPane getView() {
         return view;
     }
 }

@@ -11,6 +11,8 @@ public class Commande implements Serializable {
 
     private int id;
     private int userId;
+    private String userEmail;
+    private String username;
     private Date orderDate;
     private double total;
     private String status; // PENDING, VALIDATED, CANCELLED
@@ -37,6 +39,12 @@ public class Commande implements Serializable {
 
     public int getUserId() { return userId; }
     public void setUserId(int userId) { this.userId = userId; }
+
+    public String getUserEmail() { return userEmail; }
+    public void setUserEmail(String userEmail) { this.userEmail = userEmail; }
+
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
 
     public Date getOrderDate() { return orderDate; }
     public void setOrderDate(Date orderDate) { this.orderDate = orderDate; }

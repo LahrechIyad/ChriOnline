@@ -3,6 +3,8 @@ package server.service;
 import server.dao.CommandeDAO;
 import server.dao.PanierDAO;
 import shared.model.Commande;
+import shared.model.DashboardStats;
+import shared.model.OrderItemDetail;
 import shared.model.Panier;
 import shared.network.Response;
 import java.util.List;
@@ -73,5 +75,36 @@ public class CommandeService {
         } else {
             return new Response(false, "No orders found.", null);
         }
+    }
+
+    public Response getAllOrders(String status) {
+        List<Commande> orders = (status == null || status.isBlank() || "ALL".equalsIgnoreCase(status))
+                ? commandeDAO.findAll()
+                : commandeDAO.findByStatus(status);
+        return new Response(true, "Orders retrieved.", orders);
+    }
+
+    public Response getOrderDetails(int orderId) {
+        List<OrderItemDetail> details = commandeDAO.findOrderItemsByOrderId(orderId);
+        return new Response(true, "Order details retrieved.", details);
+    }
+
+    public Response updateOrderStatus(int orderId, String newStatus) {
+        if (!isValidStatus(newStatus)) {
+            return new Response(false, "Invalid order status.", null);
+        }
+        if (commandeDAO.updateStatus(orderId, newStatus)) {
+            return new Response(true, "Order status updated.", null);
+        }
+        return new Response(false, "Failed to update order status.", null);
+    }
+
+    public Response getDashboardStats() {
+        DashboardStats stats = commandeDAO.getDashboardStats();
+        return new Response(true, "Dashboard stats retrieved.", stats);
+    }
+
+    private boolean isValidStatus(String status) {
+        return "PENDING".equals(status) || "VALIDATED".equals(status) || "SHIPPED".equals(status) || "CANCELLED".equals(status) || "PAID".equals(status);
     }
 }

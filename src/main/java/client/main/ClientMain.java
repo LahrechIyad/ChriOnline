@@ -31,10 +31,11 @@ public class ClientMain extends Application {
             return; // stop here, do NOT open AuthView
         }
 
-        primaryStage.setTitle("ChriOnline E-Commerce");
+        primaryStage.setTitle("ChriOnline Tech");
 
         AuthView authView = new AuthView(clientTCP, primaryStage);
-        Scene scene = new Scene(authView.getView(), 800, 600);
+        Scene scene = new Scene(authView.getView(), 1180, 780);
+        scene.getStylesheets().add(getClass().getResource("/styles/app.css").toExternalForm());
 
         primaryStage.setScene(scene);
         primaryStage.show();

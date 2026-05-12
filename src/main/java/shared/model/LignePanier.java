@@ -25,11 +25,11 @@ public class LignePanier implements Serializable {
     public void setQuantity(int quantity) { this.quantity = quantity; }
 
     public double getSubTotal() {
-        return product.getPrice() * quantity;
+        return product.getFinalPrice() * quantity;
     }
 
     @Override
     public String toString() {
-        return String.format("%s (x%d) = %.2f $", product.getName(), quantity, getSubTotal());
+        return String.format("%s (x%d) = %.2f $", product.getDisplayName(), quantity, getSubTotal());
     }
 }

@@ -1,22 +1,22 @@
 package client.ui;
 
 import client.network.ClientTCP;
-import shared.model.User;
-import shared.network.Request;
-
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import shared.model.User;
+import shared.network.Request;
 
 public class MainDashboard {
-    private BorderPane view;
-    private ClientTCP clientTCP;
-    private Stage stage;
-    private User currentUser;
+    private final BorderPane view = new BorderPane();
+    private final ClientTCP clientTCP;
+    private final Stage stage;
+    private final User currentUser;
 
     public MainDashboard(ClientTCP clientTCP, Stage stage, User user) {
         this.clientTCP = clientTCP;
@@ -26,46 +26,56 @@ public class MainDashboard {
     }
 
     private void buildView() {
-        view = new BorderPane();
+        view.getStyleClass().add("app-shell");
+        view.setPadding(new Insets(18));
 
-        // Sidebar
-        VBox sidebar = new VBox(15);
-        sidebar.setPadding(new Insets(20));
-        sidebar.setStyle("-fx-background-color: #2b2b2b;");
-        sidebar.setPrefWidth(200);
+        VBox sidebar = new VBox(16);
+        sidebar.getStyleClass().add("sidebar");
+        sidebar.setPadding(new Insets(22));
+        sidebar.setPrefWidth(220);
 
-        Label welcomeLabel = new Label("Hi, " + currentUser.getUsername());
-        welcomeLabel.setStyle("-fx-text-fill: white; -fx-font-size: 18px; -fx-font-weight: bold;");
+        Label brand = new Label("ChriOnline Tech");
+        brand.getStyleClass().add("sidebar-brand");
+        Label greeting = new Label("Hello, " + currentUser.getUsername());
+        greeting.getStyleClass().add("sidebar-subtitle");
 
-        Button productsBtn = createMenuButton("Catalog");
-        Button cartBtn = createMenuButton("My Cart");
-        Button ordersBtn = createMenuButton("My Orders");
-        Button logoutBtn = createMenuButton("Logout");
+        Button storeBtn = navButton("Store");
+        Button cartBtn = navButton("Cart");
+        Button ordersBtn = navButton("Orders");
+        Button logoutBtn = navButton("Logout");
 
-        sidebar.getChildren().addAll(welcomeLabel, productsBtn, cartBtn, ordersBtn, logoutBtn);
+        sidebar.getChildren().addAll(brand, greeting, storeBtn, cartBtn, ordersBtn, logoutBtn);
         view.setLeft(sidebar);
+        view.setTop(topBar());
+        view.setCenter(new StackPane(new ProductView(clientTCP, currentUser).getView()));
 
-        // Initial default view
-        view.setCenter(new ProductView(clientTCP, currentUser).getView());
-
-        productsBtn.setOnAction(e -> view.setCenter(new ProductView(clientTCP, currentUser).getView()));
+        storeBtn.setOnAction(e -> view.setCenter(new ProductView(clientTCP, currentUser).getView()));
         cartBtn.setOnAction(e -> view.setCenter(new CartView(clientTCP, currentUser).getView()));
         ordersBtn.setOnAction(e -> view.setCenter(new OrderView(clientTCP, currentUser).getView()));
-
         logoutBtn.setOnAction(e -> {
             clientTCP.sendRequest(new Request("LOGOUT", null));
+            clientTCP.setSessionToken(null);
             AuthView authView = new AuthView(clientTCP, stage);
-            stage.setScene(new Scene(authView.getView(), 800, 600));
+            Scene scene = new Scene(authView.getView(), 1180, 780);
+            scene.getStylesheets().add(getClass().getResource("/styles/app.css").toExternalForm());
+            stage.setScene(scene);
         });
     }
 
-    private Button createMenuButton(String text) {
-        Button btn = new Button(text);
-        btn.setMaxWidth(Double.MAX_VALUE);
-        btn.setStyle("-fx-background-color: #3b3b3b; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10px;");
-        btn.setOnMouseEntered(e -> btn.setStyle("-fx-background-color: #555555; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10px;"));
-        btn.setOnMouseExited(e -> btn.setStyle("-fx-background-color: #3b3b3b; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10px;"));
-        return btn;
+    private StackPane topBar() {
+        Label status = new Label("AES/RSA secured session active");
+        status.getStyleClass().add("topbar-title");
+        StackPane pane = new StackPane(status);
+        pane.getStyleClass().add("topbar");
+        pane.setPadding(new Insets(18, 24, 18, 24));
+        return pane;
+    }
+
+    private Button navButton(String text) {
+        Button button = new Button(text);
+        button.getStyleClass().add("nav-button");
+        button.setMaxWidth(Double.MAX_VALUE);
+        return button;
     }
 
     public BorderPane getView() {

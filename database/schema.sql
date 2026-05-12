@@ -6,18 +6,29 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(20) DEFAULT 'CUSTOMER',
     is_verified BOOLEAN DEFAULT 0,
     verification_code VARCHAR(10),
+    encrypted_verification_code TEXT,
     public_key TEXT
 );
 
 CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name VARCHAR(100) NOT NULL,
+    sku TEXT UNIQUE,
+    nom_produit TEXT NOT NULL,
+    marque TEXT,
+    categorie_source TEXT,
+    categorie_metier TEXT,
+    prix_usd REAL,
+    remise_pct REAL,
+    prix_net_usd REAL,
+    rating REAL,
+    stock INTEGER NOT NULL DEFAULT 0,
+    disponibilite TEXT,
     description TEXT,
-    price REAL NOT NULL,
-    stock INTEGER NOT NULL DEFAULT 0
+    image_principale TEXT,
+    nb_images INTEGER,
+    source_catalogue TEXT
 );
 
--- We don't necessarily need a carts table if carts are in-memory, but for persistence:
 CREATE TABLE IF NOT EXISTS carts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -58,11 +69,7 @@ CREATE TABLE IF NOT EXISTS payments (
     amount REAL NOT NULL,
     method VARCHAR(50) NOT NULL,
     status VARCHAR(20) DEFAULT 'SUCCESS',
+    masked_card VARCHAR(30),
+    encrypted_billing_or_delivery_address TEXT,
     FOREIGN KEY(order_id) REFERENCES orders(id)
 );
-
--- Sample Data
-INSERT INTO products (name, description, price, stock) VALUES ('Laptop', 'High performance laptop', 1200.00, 10);
-INSERT INTO products (name, description, price, stock) VALUES ('Mouse', 'Wireless mouse', 25.50, 50);
-INSERT INTO products (name, description, price, stock) VALUES ('Keyboard', 'Mechanical keyboard', 85.00, 20);
-INSERT INTO products (name, description, price, stock) VALUES ('Monitor', '27 inch IPS display', 300.00, 15);

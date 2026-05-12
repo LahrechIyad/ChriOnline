@@ -2,11 +2,17 @@ package client.network;
 
 import shared.network.Request;
 import shared.network.Response;
+import shared.security.AESUtil;
+import shared.security.RSAUtil;
+import shared.security.SecureMessage;
+import shared.security.SecureSession;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.security.PublicKey;
+import javax.crypto.SecretKey;
 
 /**
  * Handles TCP communication with the server from the client side.
@@ -18,6 +24,7 @@ public class ClientTCP {
     private ObjectOutputStream out;
     private ObjectInputStream in;
     private String sessionToken;
+    private final SecureSession secureSession = new SecureSession();
 
     public ClientTCP(String serverAddress, int port) {
         this.serverAddress = serverAddress;
@@ -32,9 +39,13 @@ public class ClientTCP {
             socket = new Socket(serverAddress, port);
             out = new ObjectOutputStream(socket.getOutputStream());
             in = new ObjectInputStream(socket.getInputStream());
+            performHandshake();
             return true;
         } catch (IOException e) {
             System.err.println("Failed to connect to server: " + e.getMessage());
+            return false;
+        } catch (Exception e) {
+            System.err.println("Secure handshake failed: " + e.getMessage());
             return false;
         }
     }
@@ -62,14 +73,35 @@ public class ClientTCP {
             if (this.sessionToken != null) {
                 request.setSessionToken(this.sessionToken);
             }
-            
-            out.writeObject(request);
+
+            SecureMessage secureMessage = AESUtil.encryptObject(request, secureSession.getAesKey());
+            out.writeObject(secureMessage);
             out.flush();
-            return (Response) in.readObject();
-        } catch (IOException | ClassNotFoundException e) {
+            SecureMessage responseMessage = (SecureMessage) in.readObject();
+            return (Response) AESUtil.decryptObject(responseMessage, secureSession.getAesKey());
+        } catch (IOException | ClassNotFoundException | RuntimeException e) {
+            System.err.println("Communication error: " + e.getMessage());
+            return new Response(false, "Communication error: " + e.getMessage(), null);
+        } catch (Exception e) {
             System.err.println("Communication error: " + e.getMessage());
             return new Response(false, "Communication error: " + e.getMessage(), null);
         }
+    }
+
+    private void performHandshake() throws Exception {
+        byte[] serverPublicKeyBytes = (byte[]) in.readObject();
+        System.out.println("Client: Server public key received");
+        PublicKey serverPublicKey = RSAUtil.decodePublicKey(serverPublicKeyBytes);
+
+        SecretKey aesKey = AESUtil.generateKey();
+        secureSession.setAesKey(aesKey);
+        System.out.println("Client: AES session key generated");
+
+        byte[] encryptedAesKey = RSAUtil.encryptAesKey(aesKey, serverPublicKey);
+        out.writeObject(encryptedAesKey);
+        out.flush();
+        System.out.println("Client: AES key encrypted with RSA and sent");
+        System.out.println("Client: Secure AES communication established");
     }
 
     /**

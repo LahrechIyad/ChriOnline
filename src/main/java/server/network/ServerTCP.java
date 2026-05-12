@@ -1,6 +1,7 @@
 package server.network;
 
 import server.service.*;
+import server.security.ServerKeyManager;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -24,6 +25,7 @@ public class ServerTCP {
     private CommandeService commandeService;
     private PaiementService paiementService;
     private AdminAuthService adminAuthService;
+    private ServerKeyManager serverKeyManager;
     
     // TP3 - Thread Pool to prevent resource exhaustion (SYN Flood / simple connection flood)
     private ExecutorService threadPool = Executors.newFixedThreadPool(50); // Limit to 50 concurrent connections
@@ -42,6 +44,7 @@ public class ServerTCP {
         this.commandeService = new CommandeService(this.panierService);
         this.paiementService = new PaiementService(this.panierService);
         this.adminAuthService = new AdminAuthService();
+        this.serverKeyManager = new ServerKeyManager();
     }
 
     /**
@@ -76,7 +79,8 @@ public class ServerTCP {
                     panierService, 
                     commandeService, 
                     paiementService,
-                    adminAuthService
+                    adminAuthService,
+                    serverKeyManager
                 );
                 
                 // Wrap in runnable to decrement counter when finished

@@ -1,7 +1,11 @@
 package server.dao;
 
 import shared.model.Commande;
+import shared.model.DashboardStats;
+import shared.model.OrderItemDetail;
+import shared.model.Produit;
 import server.database.DBConnection;
+import server.dao.ProduitDAO;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -16,6 +20,7 @@ import java.util.Date;
 public class CommandeDAO {
     private Connection connection;
     private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private final ProduitDAO produitDAO = new ProduitDAO();
 
     public CommandeDAO() {
         this.connection = DBConnection.getConnection();
@@ -115,5 +120,141 @@ public class CommandeDAO {
             System.err.println("Error finding orders by user: " + e.getMessage());
         }
         return orders;
+    }
+
+    public List<Commande> findAll() {
+        List<Commande> orders = new ArrayList<>();
+        String query = "SELECT o.*, u.email, u.username FROM orders o JOIN users u ON u.id = o.user_id ORDER BY o.order_date DESC";
+        try (PreparedStatement stmt = connection.prepareStatement(query);
+             ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) {
+                Commande commande = new Commande(
+                        rs.getInt("id"),
+                        rs.getInt("user_id"),
+                        parseDate(rs.getString("order_date")),
+                        rs.getDouble("total"),
+                        rs.getString("status")
+                );
+                commande.setUserEmail(rs.getString("email"));
+                commande.setUsername(rs.getString("username"));
+                orders.add(commande);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error finding all orders: " + e.getMessage());
+        }
+        return orders;
+    }
+
+    public List<Commande> findByStatus(String status) {
+        List<Commande> orders = new ArrayList<>();
+        String query = "SELECT o.*, u.email, u.username FROM orders o JOIN users u ON u.id = o.user_id WHERE o.status = ? ORDER BY o.order_date DESC";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, status);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Commande commande = new Commande(
+                            rs.getInt("id"),
+                            rs.getInt("user_id"),
+                            parseDate(rs.getString("order_date")),
+                            rs.getDouble("total"),
+                            rs.getString("status")
+                    );
+                    commande.setUserEmail(rs.getString("email"));
+                    commande.setUsername(rs.getString("username"));
+                    orders.add(commande);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error finding orders by status: " + e.getMessage());
+        }
+        return orders;
+    }
+
+    public List<OrderItemDetail> findOrderItemsByOrderId(int orderId) {
+        List<OrderItemDetail> items = new ArrayList<>();
+        String query = "SELECT oi.order_id, oi.product_id, oi.quantity, oi.price, p.nom_produit, p.marque " +
+                "FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setInt(1, orderId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    items.add(new OrderItemDetail(
+                            rs.getInt("order_id"),
+                            rs.getInt("product_id"),
+                            rs.getString("nom_produit"),
+                            rs.getString("marque"),
+                            rs.getInt("quantity"),
+                            rs.getDouble("price")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error reading order details: " + e.getMessage());
+        }
+        return items;
+    }
+
+    public DashboardStats getDashboardStats() {
+        DashboardStats stats = new DashboardStats();
+        stats.setTotalProducts(produitDAO.countElectronicsProducts());
+        stats.setLowStockProducts(produitDAO.findLowStockProducts(5).size());
+        stats.setBestRatedProducts(produitDAO.findBestRatedProducts(5));
+        stats.setRecentOrders(findRecentOrders(5));
+
+        try (PreparedStatement totalOrdersStmt = connection.prepareStatement("SELECT COUNT(*) FROM orders");
+             ResultSet totalOrdersRs = totalOrdersStmt.executeQuery()) {
+            if (totalOrdersRs.next()) {
+                stats.setTotalOrders(totalOrdersRs.getInt(1));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error counting orders: " + e.getMessage());
+        }
+
+        try (PreparedStatement revenueStmt = connection.prepareStatement(
+                "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'SUCCESS'");
+             ResultSet revenueRs = revenueStmt.executeQuery()) {
+            if (revenueRs.next()) {
+                stats.setTotalRevenue(revenueRs.getDouble(1));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error calculating revenue: " + e.getMessage());
+        }
+        return stats;
+    }
+
+    private List<Commande> findRecentOrders(int limit) {
+        List<Commande> orders = new ArrayList<>();
+        String query = "SELECT o.*, u.email, u.username FROM orders o JOIN users u ON u.id = o.user_id ORDER BY o.order_date DESC LIMIT ?";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setInt(1, limit);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Commande commande = new Commande(
+                            rs.getInt("id"),
+                            rs.getInt("user_id"),
+                            parseDate(rs.getString("order_date")),
+                            rs.getDouble("total"),
+                            rs.getString("status")
+                    );
+                    commande.setUserEmail(rs.getString("email"));
+                    commande.setUsername(rs.getString("username"));
+                    orders.add(commande);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error loading recent orders: " + e.getMessage());
+        }
+        return orders;
+    }
+
+    private Date parseDate(String value) {
+        if (value == null) {
+            return new Date();
+        }
+        try {
+            return sdf.parse(value);
+        } catch (ParseException e) {
+            return new Date();
+        }
     }
 }

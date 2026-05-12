@@ -2,6 +2,7 @@ package server.dao;
 
 import shared.model.User;
 import server.database.DBConnection;
+import server.security.DatabaseCryptoService;
 
 import java.sql.*;
 
@@ -10,9 +11,11 @@ import java.sql.*;
  */
 public class UserDAO {
     private Connection connection;
+    private final DatabaseCryptoService cryptoService;
 
     public UserDAO() {
         this.connection = DBConnection.getConnection();
+        this.cryptoService = new DatabaseCryptoService();
     }
 
     /**
@@ -21,7 +24,7 @@ public class UserDAO {
      * @return True if insertion is successful, false otherwise
      */
     public boolean save(User user, String verificationCode) {
-        String query = "INSERT INTO users (username, email, password, role, is_verified, verification_code) VALUES (?, ?, ?, ?, ?, ?)";
+        String query = "INSERT INTO users (username, email, password, role, is_verified, verification_code, encrypted_verification_code) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = connection.prepareStatement(query)) {
             stmt.setString(1, user.getUsername());
             stmt.setString(2, user.getEmail());
@@ -29,6 +32,7 @@ public class UserDAO {
             stmt.setString(4, user.getRole() != null ? user.getRole() : "CUSTOMER");
             stmt.setBoolean(5, false); // always false on register
             stmt.setString(6, verificationCode);
+            stmt.setString(7, cryptoService.encryptToBase64(verificationCode));
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
             System.err.println("Error saving user: " + e.getMessage());
@@ -118,13 +122,38 @@ public class UserDAO {
      * Verifies the user if the code matches.
      */
     public boolean verifyUser(String email, String code) {
-        String query = "UPDATE users SET is_verified = 1 WHERE email = ? AND verification_code = ? AND is_verified = 0";
+        String query = "SELECT id, is_verified, encrypted_verification_code, verification_code FROM users WHERE email = ?";
         try (PreparedStatement stmt = connection.prepareStatement(query)) {
             stmt.setString(1, email);
-            stmt.setString(2, code);
-            return stmt.executeUpdate() > 0;
+            ResultSet rs = stmt.executeQuery();
+            if (!rs.next() || rs.getBoolean("is_verified")) {
+                return false;
+            }
+            String encryptedCode = rs.getString("encrypted_verification_code");
+            String storedCode = encryptedCode != null ? cryptoService.decryptFromBase64(encryptedCode) : rs.getString("verification_code");
+            if (!code.equals(storedCode)) {
+                return false;
+            }
+            try (PreparedStatement update = connection.prepareStatement(
+                    "UPDATE users SET is_verified = 1, verification_code = NULL, encrypted_verification_code = NULL WHERE id = ?")) {
+                update.setInt(1, rs.getInt("id"));
+                return update.executeUpdate() > 0;
+            }
         } catch (SQLException e) {
             System.err.println("Error verifying user: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean updateVerificationCode(String email, String verificationCode) {
+        String query = "UPDATE users SET verification_code = ?, encrypted_verification_code = ?, is_verified = 0 WHERE email = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, verificationCode);
+            stmt.setString(2, cryptoService.encryptToBase64(verificationCode));
+            stmt.setString(3, email);
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error updating verification code: " + e.getMessage());
             return false;
         }
     }

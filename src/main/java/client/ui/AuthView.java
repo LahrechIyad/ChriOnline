@@ -1,16 +1,21 @@
 package client.ui;
 
 import client.network.ClientTCP;
-import shared.model.User;
-import shared.network.Request;
-import shared.network.Response;
-
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import shared.model.User;
+import shared.network.Request;
+import shared.network.Response;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -19,19 +24,17 @@ import java.util.Map;
 
 public class AuthView {
     private VBox view;
-    private ClientTCP clientTCP;
-    private Stage stage;
-    
-    // View States: 0 = Login, 1 = Register, 2 = Verify Email
-    private int currentMode = 0; 
-
+    private final ClientTCP clientTCP;
+    private final Stage stage;
+    private int currentMode = 0;
     private TextField usernameField;
     private TextField emailField;
     private PasswordField passwordField;
-    private TextField verifyCodeField; // For Email Verification
+    private TextField verifyCodeField;
     private Label title;
     private Button mainBtn;
     private Button switchBtn;
+    private Button resendBtn;
     private Label messageLabel;
 
     public AuthView(ClientTCP clientTCP, Stage stage) {
@@ -41,183 +44,214 @@ public class AuthView {
     }
 
     private void buildView() {
-        view = new VBox(15);
-        view.setPadding(new Insets(30));
-        view.setAlignment(Pos.CENTER);
-        view.setStyle("-fx-background-color: #f8f9fa;");
+        view = new VBox();
+        view.getStyleClass().add("auth-root");
 
-        title = new Label("Login to ChriOnline");
-        title.setStyle("-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: #343a40;");
+        HBox split = new HBox(28);
+        split.setPadding(new Insets(28));
+        split.setAlignment(Pos.CENTER);
 
+        VBox hero = new VBox(18);
+        hero.getStyleClass().add("hero-pane");
+        hero.setPadding(new Insets(40));
+        hero.setPrefWidth(520);
+        HBox.setHgrow(hero, Priority.ALWAYS);
+        Label brand = new Label("ChriOnline Tech");
+        brand.getStyleClass().add("hero-brand");
+        Label headline = new Label("Secure electronics shopping with a premium storefront.");
+        headline.getStyleClass().add("hero-title");
+        headline.setWrapText(true);
+        Label sub = new Label("Secure electronics shopping with AES/RSA protected communication");
+        sub.getStyleClass().add("hero-subtitle");
+        sub.setWrapText(true);
+        HBox badges = new HBox(10, badge("AES session"), badge("RSA handshake"), badge("Verified account"));
+        Label note = new Label("Discover smartphones, laptops, tablets and accessories over an encrypted client-server channel.");
+        note.getStyleClass().add("hero-caption");
+        note.setWrapText(true);
+        hero.getChildren().addAll(brand, headline, sub, badges, note);
+
+        VBox card = new VBox(14);
+        card.getStyleClass().add("glass-card");
+        card.setPadding(new Insets(28));
+        card.setMaxWidth(380);
+        card.setPrefWidth(380);
+
+        title = new Label("Welcome back");
+        title.getStyleClass().add("section-title");
         usernameField = new TextField();
         usernameField.setPromptText("Username");
-        usernameField.setMaxWidth(300);
         usernameField.setVisible(false);
         usernameField.setManaged(false);
-
         emailField = new TextField();
-        emailField.setPromptText("Email");
-        emailField.setMaxWidth(300);
-
+        emailField.setPromptText("Email address");
         passwordField = new PasswordField();
         passwordField.setPromptText("Password");
-        passwordField.setMaxWidth(300);
-        
         verifyCodeField = new TextField();
-        verifyCodeField.setPromptText("6-digit Verification Code");
-        verifyCodeField.setMaxWidth(300);
+        verifyCodeField.setPromptText("6-digit verification code");
         verifyCodeField.setVisible(false);
         verifyCodeField.setManaged(false);
-
         mainBtn = new Button("Login");
-        mainBtn.setStyle("-fx-background-color: #0d6efd; -fx-text-fill: white; -fx-font-weight: bold;");
-        mainBtn.setPrefWidth(300);
-
-        switchBtn = new Button("Don't have an account? Register");
-        switchBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #0d6efd; -fx-underline: true;");
-
+        mainBtn.getStyleClass().add("primary-button");
+        mainBtn.setMaxWidth(Double.MAX_VALUE);
+        switchBtn = new Button("Create an account");
+        switchBtn.getStyleClass().add("ghost-button");
+        switchBtn.setMaxWidth(Double.MAX_VALUE);
+        resendBtn = new Button("Resend code");
+        resendBtn.getStyleClass().add("secondary-button");
+        resendBtn.setMaxWidth(Double.MAX_VALUE);
+        resendBtn.setVisible(false);
+        resendBtn.setManaged(false);
         messageLabel = new Label();
+        messageLabel.getStyleClass().add("muted-label");
         messageLabel.setWrapText(true);
-        messageLabel.setMaxWidth(300);
 
         mainBtn.setOnAction(e -> handleAction());
         switchBtn.setOnAction(e -> switchMode());
+        resendBtn.setOnAction(e -> resendVerificationCode());
+        card.getChildren().addAll(title, usernameField, emailField, passwordField, verifyCodeField, mainBtn, resendBtn, switchBtn, messageLabel);
+        split.getChildren().addAll(hero, new StackPane(card));
+        view.getChildren().add(split);
+    }
 
-        view.getChildren().addAll(title, usernameField, emailField, passwordField, verifyCodeField, mainBtn, switchBtn, messageLabel);
+    private Label badge(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("security-badge");
+        return label;
     }
 
     private void switchMode() {
         if (currentMode == 0) {
-            // From Login -> Register
             currentMode = 1;
-            title.setText("Create an Account");
+            title.setText("Create your account");
             usernameField.setVisible(true);
             usernameField.setManaged(true);
-            verifyCodeField.setVisible(false);
-            verifyCodeField.setManaged(false);
             passwordField.setVisible(true);
             passwordField.setManaged(true);
+            verifyCodeField.setVisible(false);
+            verifyCodeField.setManaged(false);
+            emailField.setDisable(false);
             mainBtn.setText("Register");
-            switchBtn.setText("Already have an account? Login");
-            switchBtn.setVisible(true);
-        } else if (currentMode == 1) {
-            // From Register -> Login
+            resendBtn.setVisible(false);
+            resendBtn.setManaged(false);
+            switchBtn.setText("Back to login");
+        } else {
             currentMode = 0;
-            title.setText("Login to ChriOnline");
+            title.setText("Welcome back");
             usernameField.setVisible(false);
             usernameField.setManaged(false);
-            verifyCodeField.setVisible(false);
-            verifyCodeField.setManaged(false);
             passwordField.setVisible(true);
             passwordField.setManaged(true);
-            mainBtn.setText("Login");
-            switchBtn.setText("Don't have an account? Register");
-            switchBtn.setVisible(true);
-        } else if (currentMode == 2) {
-            // From Verify -> Login manually
-            currentMode = 0;
-            title.setText("Login to ChriOnline");
-            usernameField.setVisible(false);
-            usernameField.setManaged(false);
             verifyCodeField.setVisible(false);
             verifyCodeField.setManaged(false);
-            passwordField.setVisible(true);
-            passwordField.setManaged(true);
+            emailField.setDisable(false);
             mainBtn.setText("Login");
-            switchBtn.setText("Don't have an account? Register");
-            switchBtn.setVisible(true);
+            resendBtn.setVisible(false);
+            resendBtn.setManaged(false);
+            switchBtn.setText("Create an account");
         }
-        
-        messageLabel.setText("");
-        passwordField.clear();
-        usernameField.clear();
-        verifyCodeField.clear();
+        clearFeedback();
     }
-    
+
     private void setVerifyMode(String emailToVerify) {
-        currentMode = 2; // Verify State
-        title.setText("Verify Email");
+        currentMode = 2;
+        title.setText("Verify your account");
         emailField.setText(emailToVerify);
-        emailField.setDisable(true); // Don't let them change it now
+        emailField.setDisable(true);
         usernameField.setVisible(false);
         usernameField.setManaged(false);
         passwordField.setVisible(false);
         passwordField.setManaged(false);
-        
         verifyCodeField.setVisible(true);
         verifyCodeField.setManaged(true);
-        
-        mainBtn.setText("Verify Code");
-        switchBtn.setText("Back to Login");
-        switchBtn.setVisible(true);
-        messageLabel.setText("Please enter the verification code sent to your email.");
-        messageLabel.setStyle("-fx-text-fill: green;");
+        mainBtn.setText("Verify code");
+        resendBtn.setVisible(true);
+        resendBtn.setManaged(true);
+        switchBtn.setText("Back to login");
+        messageLabel.setText("Enter the verification code sent to your email.");
+        messageLabel.getStyleClass().setAll("success-label");
     }
 
+    @SuppressWarnings("unchecked")
     private void handleAction() {
         if (currentMode == 0) {
-            // LOGIN
             Map<String, String> creds = new HashMap<>();
             creds.put("email", emailField.getText());
             creds.put("password", hashPassword(passwordField.getText()));
-
             Response resp = clientTCP.sendRequest(new Request("LOGIN", creds));
             if (resp != null && resp.isSuccess()) {
-                // TP5 - Retrieve and set session Token
                 Map<String, Object> respData = (Map<String, Object>) resp.getData();
                 User user = (User) respData.get("user");
-                String token = (String) respData.get("token");
-                
-                clientTCP.setSessionToken(token); // Set it globally for the client
-                
+                clientTCP.setSessionToken((String) respData.get("token"));
                 MainDashboard dashboard = new MainDashboard(clientTCP, stage, user);
-                stage.setScene(new Scene(dashboard.getView(), 900, 600));
+                Scene scene = new Scene(dashboard.getView(), 1320, 860);
+                attachStyles(scene);
+                stage.setScene(scene);
             } else if (resp != null && "NOT_VERIFIED".equals(resp.getData())) {
-                // Requires Verification
                 setVerifyMode(emailField.getText());
             } else {
                 showError(resp != null ? resp.getMessage() : "Connection failed.");
             }
-        } else if (currentMode == 1) {
-            // REGISTER
+            return;
+        }
+
+        if (currentMode == 1) {
             String rawPassword = passwordField.getText();
-            
-            // Password Complexity Validation
-            if (rawPassword == null || rawPassword.length() < 6 
-                || !rawPassword.matches(".*[A-Z].*") 
-                || !rawPassword.matches(".*[^a-zA-Z0-9].*")) {
-                showError("Password must be at least 6 characters, with 1 uppercase and 1 special character.");
+            if (rawPassword == null || rawPassword.length() < 6
+                    || !rawPassword.matches(".*[A-Z].*")
+                    || !rawPassword.matches(".*[^a-zA-Z0-9].*")) {
+                showError("Password must contain at least 6 characters, one uppercase letter and one special character.");
                 return;
             }
-
             User newUser = new User(usernameField.getText(), emailField.getText(), hashPassword(rawPassword), "CUSTOMER");
             Response resp = clientTCP.sendRequest(new Request("REGISTER", newUser));
             if (resp != null && resp.isSuccess()) {
                 setVerifyMode(emailField.getText());
             } else {
-                showError(resp != null ? resp.getMessage() : "Connection failed.");
+                showError(resp != null ? resp.getMessage() : "Registration failed.");
             }
-        } else if (currentMode == 2) {
-            // VERIFY
-            Map<String, String> verifData = new HashMap<>();
-            verifData.put("email", emailField.getText());
-            verifData.put("code", verifyCodeField.getText());
+            return;
+        }
 
-            Response resp = clientTCP.sendRequest(new Request("VERIFY_EMAIL", verifData));
-            if (resp != null && resp.isSuccess()) {
-                messageLabel.setText("Account Verified! You can now log in.");
-                messageLabel.setStyle("-fx-text-fill: green;");
-                emailField.setDisable(false);
-                switchMode(); // Back to login
-            } else {
-                showError(resp != null ? resp.getMessage() : "Verification failed.");
-            }
+        Map<String, String> verifData = new HashMap<>();
+        verifData.put("email", emailField.getText());
+        verifData.put("code", verifyCodeField.getText());
+        Response resp = clientTCP.sendRequest(new Request("VERIFY_EMAIL", verifData));
+        if (resp != null && resp.isSuccess()) {
+            messageLabel.setText("Account verified. You can now log in.");
+            messageLabel.getStyleClass().setAll("success-label");
+            emailField.setDisable(false);
+            currentMode = 0;
+            title.setText("Welcome back");
+            verifyCodeField.setVisible(false);
+            verifyCodeField.setManaged(false);
+            passwordField.setVisible(true);
+            passwordField.setManaged(true);
+            mainBtn.setText("Login");
+            resendBtn.setVisible(false);
+            resendBtn.setManaged(false);
+            switchBtn.setText("Create an account");
+        } else {
+            showError(resp != null ? resp.getMessage() : "Verification failed.");
         }
     }
 
-    /**
-     * Hashes password on client side with SHA-256 before transmitting.
-     */
+    private void resendVerificationCode() {
+        Response resp = clientTCP.sendRequest(new Request("RESEND_VERIFICATION_CODE", emailField.getText()));
+        if (resp != null && resp.isSuccess()) {
+            messageLabel.setText(resp.getMessage());
+            messageLabel.getStyleClass().setAll("success-label");
+        } else {
+            showError(resp != null ? resp.getMessage() : "Failed to resend verification code.");
+        }
+    }
+
+    private void attachStyles(Scene scene) {
+        String stylesheet = getClass().getResource("/styles/app.css").toExternalForm();
+        if (!scene.getStylesheets().contains(stylesheet)) {
+            scene.getStylesheets().add(stylesheet);
+        }
+    }
+
     private String hashPassword(String password) {
         if (password == null || password.isEmpty()) return "";
         try {
@@ -237,9 +271,17 @@ public class AuthView {
         }
     }
 
+    private void clearFeedback() {
+        usernameField.clear();
+        passwordField.clear();
+        verifyCodeField.clear();
+        messageLabel.setText("");
+        messageLabel.getStyleClass().setAll("muted-label");
+    }
+
     private void showError(String msg) {
         messageLabel.setText(msg);
-        messageLabel.setStyle("-fx-text-fill: red;");
+        messageLabel.getStyleClass().setAll("error-label");
     }
 
     public VBox getView() {
