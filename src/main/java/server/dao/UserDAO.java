@@ -3,6 +3,7 @@ package server.dao;
 import shared.model.User;
 import server.database.DBConnection;
 import server.security.DatabaseCryptoService;
+import server.security.PasswordHashService;
 
 import java.sql.*;
 
@@ -28,7 +29,7 @@ public class UserDAO {
         try (PreparedStatement stmt = connection.prepareStatement(query)) {
             stmt.setString(1, user.getUsername());
             stmt.setString(2, user.getEmail());
-            stmt.setString(3, user.getPassword());
+            stmt.setString(3, PasswordHashService.hash(user.getPassword()));
             stmt.setString(4, user.getRole() != null ? user.getRole() : "CUSTOMER");
             stmt.setBoolean(5, false); // always false on register
             stmt.setString(6, verificationCode);
@@ -73,12 +74,23 @@ public class UserDAO {
      * @return User object if authentication is successful, null otherwise
      */
     public User authenticate(String email, String password) {
-        String query = "SELECT * FROM users WHERE email = ? AND password = ?";
+        String query = "SELECT * FROM users WHERE email = ?";
         try (PreparedStatement stmt = connection.prepareStatement(query)) {
             stmt.setString(1, email);
-            stmt.setString(2, password);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
+                String storedPassword = rs.getString("password");
+                boolean validPassword = PasswordHashService.verify(password, storedPassword);
+
+                if (!validPassword && password != null && password.equals(storedPassword)) {
+                    validPassword = true;
+                    updatePasswordHash(rs.getInt("id"), password);
+                }
+
+                if (!validPassword) {
+                    return null;
+                }
+
                 return new User(
                     rs.getInt("id"),
                     rs.getString("username"),
@@ -92,6 +104,17 @@ public class UserDAO {
             System.err.println("Error authenticating user: " + e.getMessage());
         }
         return null;
+    }
+
+    private void updatePasswordHash(int userId, String password) {
+        String query = "UPDATE users SET password = ? WHERE id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, PasswordHashService.hash(password));
+            stmt.setInt(2, userId);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Error upgrading password hash: " + e.getMessage());
+        }
     }
 
     /**

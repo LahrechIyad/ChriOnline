@@ -1,6 +1,8 @@
 package server.network;
 
 import server.service.*;
+import server.security.IntrusionDetectionService;
+import server.security.SecurityEventLogger;
 import server.security.ServerKeyManager;
 
 import java.io.IOException;
@@ -59,16 +61,24 @@ public class ServerTCP {
                 System.out.println("Waiting for client connection...");
                 Socket clientSocket = serverSocket.accept();
                 String clientIP = clientSocket.getInetAddress().getHostAddress();
+
+                if (IntrusionDetectionService.isBlocked(clientIP)) {
+                    SecurityEventLogger.log("IPS", "-", clientIP, "CONNECTION_REJECTED", "IP temporarily blocked");
+                    clientSocket.close();
+                    continue;
+                }
                 
                 // Track and limit connections by IP
                 int currentConns = connectionCounts.getOrDefault(clientIP, 0);
                 if (currentConns >= MAX_CONN_PER_IP) {
+                    IntrusionDetectionService.blockIp(clientIP, "-", "CONNECTION_FLOOD", "Too many simultaneous connections");
                     System.err.println("Rejected connection from " + clientIP + ": Rate limit exceeded.");
                     clientSocket.close();
                     continue;
                 }
                 
                 connectionCounts.put(clientIP, currentConns + 1);
+                SecurityEventLogger.log("CONNECTION", "-", clientIP, "CONNECT", "ACCEPTED");
                 System.out.println("Client connected: " + clientIP);
 
                 // Delegate to a new ClientHandler thread safely via ThreadPool
@@ -89,7 +99,12 @@ public class ServerTCP {
                         handler.run();
                     } finally {
                         // Decrease connection count for this IP
-                        connectionCounts.put(clientIP, connectionCounts.get(clientIP) - 1);
+                        int remaining = connectionCounts.getOrDefault(clientIP, 1) - 1;
+                        if (remaining <= 0) {
+                            connectionCounts.remove(clientIP);
+                        } else {
+                            connectionCounts.put(clientIP, remaining);
+                        }
                     }
                 });
             }

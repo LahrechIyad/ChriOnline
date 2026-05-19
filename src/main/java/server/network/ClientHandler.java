@@ -5,6 +5,8 @@ import shared.network.Response;
 import shared.model.User;
 import shared.model.Produit;
 import server.service.*;
+import server.security.IntrusionDetectionService;
+import server.security.SecurityEventLogger;
 import server.security.ServerKeyManager;
 import shared.security.AESUtil;
 import shared.security.RSAUtil;
@@ -27,6 +29,7 @@ import javax.crypto.SecretKey;
  */
 public class ClientHandler implements Runnable {
     private Socket clientSocket;
+    private final String clientIp;
     private ObjectInputStream in;
     private ObjectOutputStream out;
     private final SecureSession secureSession = new SecureSession();
@@ -52,6 +55,7 @@ public class ClientHandler implements Runnable {
                          PanierService panierService, CommandeService commandeService, PaiementService paiementService,
                          AdminAuthService adminAuthService, ServerKeyManager serverKeyManager) {
         this.clientSocket = clientSocket;
+        this.clientIp = clientSocket.getInetAddress().getHostAddress();
         this.userService = userService;
         this.produitService = produitService;
         this.panierService = panierService;
@@ -69,20 +73,29 @@ public class ClientHandler implements Runnable {
             performHandshake();
 
             while (true) {
+                if (IntrusionDetectionService.isBlocked(clientIp)) {
+                    sendResponse(new Response(false, "IP temporarily blocked by IPS.", null));
+                    break;
+                }
+
                 SecureMessage secureMessage = (SecureMessage) in.readObject();
                 if (secureMessage == null) break;
                 Request request = (Request) AESUtil.decryptObject(secureMessage, secureSession.getAesKey());
+                IntrusionDetectionService.recordRequest(clientIp);
 
                 // TP2 - Replay Attack Check
                 if (!isValidRequest(request)) {
+                    SecurityEventLogger.alert(getRequestUser(request), clientIp, request.getType(), "Invalid timestamp or replayed nonce");
                     sendResponse(new Response(false, "Security Check Failed: Invalid or replayed request.", null));
                     continue;
                 }
 
                 Response response = processRequest(request);
+                auditRequest(request, response);
                 sendResponse(response);
             }
         } catch (Exception e) {
+            SecurityEventLogger.log("CONNECTION", "-", clientIp, "DISCONNECT", e.getMessage());
             System.out.println("Client disconnected or error: " + e.getMessage());
         } finally {
             closeConnections();
@@ -114,6 +127,71 @@ public class ClientHandler implements Runnable {
             }
         }
         return true;
+    }
+
+    private void auditRequest(Request request, Response response) {
+        String type = request.getType();
+        String user = getRequestUser(request);
+        String status = response.isSuccess() ? "SUCCESS" : "FAILED: " + response.getMessage();
+
+        switch (type) {
+            case "LOGIN":
+                SecurityEventLogger.log("AUTH", user, clientIp, type, status);
+                if (!response.isSuccess()) {
+                    IntrusionDetectionService.recordLoginFailure(user, clientIp);
+                }
+                break;
+
+            case "VERIFY_EMAIL":
+                SecurityEventLogger.log("OTP", user, clientIp, type, status);
+                if (!response.isSuccess()) {
+                    IntrusionDetectionService.recordOtpFailure(user, clientIp);
+                }
+                break;
+
+            case "ADMIN_AUTH_REQUEST":
+            case "ADMIN_AUTH_VERIFY":
+                SecurityEventLogger.log("ADMIN_AUTH", user, clientIp, type, status);
+                if (!response.isSuccess()) {
+                    IntrusionDetectionService.recordLoginFailure(user, clientIp);
+                }
+                break;
+
+            case "GET_MY_ORDERS":
+            case "ADMIN_GET_ORDERS":
+            case "ADMIN_GET_ORDER_DETAILS":
+            case "PROCESS_PAYMENT":
+                SecurityEventLogger.log("SENSITIVE_ACCESS", user, clientIp, type, status);
+                break;
+
+            default:
+                if (type != null && type.startsWith("ADMIN_")) {
+                    SecurityEventLogger.log("ADMIN_ACTION", user, clientIp, type, status);
+                    if (!response.isSuccess() && response.getMessage() != null
+                            && response.getMessage().contains("Admin role required")) {
+                        IntrusionDetectionService.recordAdminDenied(user, clientIp, type);
+                    }
+                }
+                break;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private String getRequestUser(Request request) {
+        if (request.getSessionToken() != null && activeSessions.containsKey(request.getSessionToken())) {
+            return activeSessions.get(request.getSessionToken()).getEmail();
+        }
+        Object data = request.getData();
+        if (data instanceof Map) {
+            Object email = ((Map<String, Object>) data).get("email");
+            if (email instanceof String) {
+                return (String) email;
+            }
+        }
+        if (data instanceof String && request.getType() != null && request.getType().contains("AUTH")) {
+            return (String) data;
+        }
+        return "-";
     }
 
     @SuppressWarnings("unchecked")
